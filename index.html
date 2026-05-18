@@ -134,6 +134,13 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .badge-gray{background:#f3f4f6;color:#6b7280}
 hr{border:none;border-top:1px solid #eee;margin:16px 0}
 
+/* ===== Admin Drag Reorder ===== */
+.drag-handle{cursor:grab;color:#bbb;padding:0 8px 0 0;user-select:none;font-size:18px;line-height:1;vertical-align:middle}
+.drag-handle:hover{color:#888}
+.drag-handle:active{cursor:grabbing}
+.media-item.dragging{opacity:0.4;border-style:dashed}
+.media-item.drag-over{outline:2px dashed #4949FF;outline-offset:-2px;background:#f5f5ff}
+
 /* ===== Bookmarklet Modal ===== */
 /* MM action section */
 .mm-section{display:none;align-items:flex-start;gap:8px;flex-wrap:wrap;width:100%;border-top:1px solid #eee;padding-top:10px;margin-top:6px}
@@ -236,14 +243,6 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
     </div>
   </div>
 
-  <!-- フッター -->
-  <div class="card" id="footerCard" style="display:none">
-    <div class="card-header"><h2>フッター</h2></div>
-    <div class="card-body">
-      <textarea class="header-footer-textarea" id="footerText"></textarea>
-    </div>
-  </div>
-
   <!-- 原稿比較 -->
   <div class="diff-container" id="diffContainer">
     <div class="diff-header">
@@ -262,6 +261,14 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
         <h3>変更後</h3>
         <div class="diff-text" id="diffAfterText"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- フッター -->
+  <div class="card" id="footerCard" style="display:none">
+    <div class="card-header"><h2>フッター</h2></div>
+    <div class="card-body">
+      <textarea class="header-footer-textarea" id="footerText"></textarea>
     </div>
   </div>
 
@@ -490,6 +497,7 @@ let currentMedia = null;
 let originalBodyText = '';
 let firstInput = true;
 let openEditId = null;
+let dragId = null;
 
 // ========== DOM refs ==========
 const $ = id => document.getElementById(id);
@@ -690,10 +698,8 @@ function downloadText() {
 }
 
 function downloadHtml() {
-  const h = escHtml(el.headerText.value);
-  const b = escHtml(el.bodyText.value);
-  const f = escHtml(el.footerText.value);
-  const html = `<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n<title>HTMLメール</title>\n</head>\n<body>\n<pre style="font-family:sans-serif;font-size:14px;line-height:1.8;white-space:pre-wrap">${[h,b,f].filter(x=>x.trim()).join('\n\n')}</pre>\n</body>\n</html>`;
+  const body = buildBmHtmlContent();
+  const html = `<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n</head>\n<body>\n${body}\n</body>\n</html>`;
   downloadFile(html, 'mail.html', 'text/html');
 }
 
@@ -837,6 +843,66 @@ function renderPresets() {
       </div>`).join('');
 }
 
+// ========== Admin Drag Reorder ==========
+function attachDragHandlers() {
+  const container = el.mediaListContainer;
+
+  container.addEventListener('dragstart', e => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) { e.preventDefault(); return; }
+    const item = handle.closest('.media-item');
+    if (!item) return;
+    dragId = item.dataset.id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragId);
+    e.dataTransfer.setDragImage(item, 20, 20);
+    item.classList.add('dragging');
+  });
+
+  container.addEventListener('dragover', e => {
+    if (!dragId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const item = e.target.closest('.media-item');
+    if (!item || item.dataset.id === dragId) return;
+    container.querySelectorAll('.media-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+    item.classList.add('drag-over');
+  });
+
+  container.addEventListener('dragleave', e => {
+    if (!e.relatedTarget || !container.contains(e.relatedTarget)) {
+      container.querySelectorAll('.media-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+    }
+  });
+
+  container.addEventListener('drop', e => {
+    e.preventDefault();
+    if (!dragId) return;
+    const item = e.target.closest('.media-item');
+    if (!item) return;
+    const dropId = item.dataset.id;
+    if (!dropId || dropId === dragId) return;
+
+    const fromIdx = mediaList.findIndex(m => m.id === dragId);
+    const toIdx = mediaList.findIndex(m => m.id === dropId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const [moved] = mediaList.splice(fromIdx, 1);
+    mediaList.splice(toIdx, 0, moved);
+    mediaList.forEach((m, i) => { m.sortOrder = i + 1; });
+    saveMedia(mediaList);
+    dragId = null;
+    renderAdminList();
+    renderSelect();
+    toast('並び順を変更しました');
+  });
+
+  container.addEventListener('dragend', () => {
+    dragId = null;
+    container.querySelectorAll('.media-item').forEach(el => el.classList.remove('dragging', 'drag-over'));
+  });
+}
+
 // ========== Admin Panel ==========
 function renderAdminList() {
   const sorted = [...mediaList].sort((a,b) => (a.sortOrder||99)-(b.sortOrder||99));
@@ -850,12 +916,12 @@ function renderAdminList() {
 function renderMediaItem(m) {
   const isOpen = openEditId === m.id;
   return `
-  <div class="media-item" id="media-item-${m.id}">
+  <div class="media-item" id="media-item-${m.id}" data-id="${m.id}">
     <div class="media-item-header" onclick="toggleEdit('${m.id}')">
       <div>
+        <span class="drag-handle" draggable="true" onclick="event.stopPropagation()" title="ドラッグして並び替え">⠿</span>
         <span class="media-item-id">${m.id}</span>
         <span class="media-item-title">${escHtml(m.name)}</span>
-        <span class="badge badge-gray" style="margin-left:8px">${escHtml(m.columnName||'')}</span>
         <span class="badge badge-primary" style="margin-left:4px">${m.deliveryTime||''}</span>
       </div>
       <div class="media-item-actions" onclick="event.stopPropagation()">
@@ -868,16 +934,8 @@ function renderMediaItem(m) {
         <input type="text" id="edit-id-${m.id}" value="${escHtml(m.id)}" style="max-width:100px">
       </div>
       <div class="form-row">
-        <label>表示順</label>
-        <input type="text" id="edit-sort-${m.id}" value="${m.sortOrder||''}" style="max-width:80px">
-      </div>
-      <div class="form-row">
         <label>媒体名</label>
         <input type="text" id="edit-name-${m.id}" value="${escHtml(m.name)}">
-      </div>
-      <div class="form-row">
-        <label>カラム名（ブックマークレット等で使用）</label>
-        <input type="text" id="edit-col-${m.id}" value="${escHtml(m.columnName||'')}">
       </div>
       <div class="form-row">
         <label>配信システム（MM=メールマーケティング、他システムは任意の識別子）</label>
@@ -920,9 +978,9 @@ function toggleEdit(id) {
 function saveMediaItem(oldId) {
   const newId = $(`edit-id-${oldId}`).value.trim();
   const name = $(`edit-name-${oldId}`).value.trim();
-  const col = $(`edit-col-${oldId}`).value.trim();
   const ds = ($(`edit-ds-${oldId}`) ? $(`edit-ds-${oldId}`).value.trim() : '') || 'MM';
-  const sort = parseInt($(`edit-sort-${oldId}`).value) || 0;
+  const idx = mediaList.findIndex(m => m.id === oldId);
+  const sort = idx !== -1 ? (mediaList[idx].sortOrder || idx + 1) : 0;
   const hour = $(`edit-hour-${oldId}`).value;
   const min = $(`edit-min-${oldId}`).value;
   const header = $(`edit-header-${oldId}`).value;
@@ -932,10 +990,9 @@ function saveMediaItem(oldId) {
   if (!name) { toast('媒体名を入力してください'); return; }
   if (newId !== oldId && mediaList.some(m => m.id === newId)) { toast('そのIDは既に使用されています'); return; }
 
-  const idx = mediaList.findIndex(m => m.id === oldId);
   if (idx === -1) { toast('エラー: 媒体が見つかりません'); return; }
 
-  mediaList[idx] = { id: newId, sortOrder: sort, columnName: col, name, deliverySystem: ds, deliveryTime: `${hour}:${min}`, header, footer };
+  mediaList[idx] = { id: newId, sortOrder: sort, name, deliverySystem: ds, deliveryTime: `${hour}:${min}`, header, footer };
   saveMedia(mediaList);
   openEditId = newId !== oldId ? null : newId;
   renderAdminList();
@@ -961,7 +1018,7 @@ function deleteMediaItem(id) {
 
 function addNewMedia() {
   const id = getNextId(mediaList);
-  const newMedia = { id, sortOrder: mediaList.length + 1, columnName: '', name: '新規媒体', deliverySystem: 'MM', deliveryTime: '10:00', header: '', footer: '' };
+  const newMedia = { id, sortOrder: mediaList.length + 1, name: '新規媒体', deliverySystem: 'MM', deliveryTime: '10:00', header: '', footer: '' };
   mediaList.push(newMedia);
   saveMedia(mediaList);
   openEditId = id;
@@ -1059,14 +1116,14 @@ function extractSubject() {
 function getBmTitle() {
   const d = el.dateInput.value.trim();
   const mmdd = d.length === 8 ? d.slice(4) : '';
-  return mmdd + (currentMedia ? (currentMedia.columnName || '') : '');
+  return mmdd + (currentMedia ? (currentMedia.name || '') : '');
 }
 
 function buildBmHtmlContent() {
   const h = escHtml(el.headerText.value);
   const b = escHtml(el.bodyText.value);
   const f = escHtml(el.footerText.value);
-  return `<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n<title>HTMLメール</title>\n</head>\n<body>\n<pre style="font-family:sans-serif;font-size:14px;line-height:1.8;white-space:pre-wrap">${[h,b,f].filter(x=>x.trim()).join('\n\n')}</pre>\n</body>\n</html>`;
+  return `<pre style="font-family:sans-serif;font-size:14px;line-height:1.8;white-space:pre-wrap">${[h,b,f].filter(x=>x.trim()).join('\n\n')}</pre>`;
 }
 
 function generateBmText() {
@@ -1099,18 +1156,21 @@ function generateBmHtml() {
     `var tt=q('[name="temptitle"]');if(tt)tt.value=s;`,
     `var r1=q('[name="mailtype"][value="1"]');if(r1)r1.click();`,
     `var r2=document.getElementById('msghtmlRad');if(r2)r2.click();`,
-    `setTimeout(function(){`,
-    `if(window.CKEDITOR&&CKEDITOR.instances.strHtmlMsg){CKEDITOR.instances.strHtmlMsg.setData(h);}`,
-    `else{var e=document.getElementById('strHtmlMsg');if(e)e.value=h;}`,
+    `var maxT=20,cnt=0,fn=function(){`,
+    `if(window.CKEDITOR&&CKEDITOR.instances.strHtmlMsg){`,
+    `CKEDITOR.instances.strHtmlMsg.setData(h);`,
     `alert('HTML本文を入力しました。内容を確認して保存してください。');`,
-    `},500);`
+    `}else if(cnt<maxT){cnt++;setTimeout(fn,300);}`,
+    `else{var e=document.getElementById('strHtmlMsg');if(e)e.value=h;`,
+    `alert('HTML本文を入力しました。内容を確認して保存してください。');}`,
+    `};setTimeout(fn,400);`
   ].join('');
   return `javascript:(function(){${code}})();`;
 }
 
 function generateBmReserve() {
   const t = getBmTitle();
-  const col = currentMedia ? (currentMedia.columnName || '') : '';
+  const col = currentMedia ? (currentMedia.name || '') : '';
   const mName = currentMedia ? (currentMedia.name || '') : '';
   const d = el.dateInput.value.trim();
   const delivTime = currentMedia ? (currentMedia.deliveryTime || '10:00') : '10:00';
@@ -1204,6 +1264,7 @@ function init() {
   el.checkCharsBtn.addEventListener('click', checkDepChars);
 
   // Admin
+  attachDragHandlers();
   el.addMediaBtn.addEventListener('click', addNewMedia);
   el.exportBtn.addEventListener('click', exportData);
   el.importBtn.addEventListener('click', () => el.importFile.click());
