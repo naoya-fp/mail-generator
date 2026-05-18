@@ -720,7 +720,8 @@ function checkDepChars() {
 function updateDiff() {
   if (!originalBodyText) return;
   const curr = el.bodyText.value;
-  if (curr === originalBodyText) { el.diffContainer.classList.remove('show'); return; }
+  const isShown = el.diffContainer.classList.contains('show');
+  if (curr === originalBodyText && !isShown) return;
 
   const before = originalBodyText;
   const after = curr;
