@@ -243,6 +243,14 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
     </div>
   </div>
 
+  <!-- 広告主情報 -->
+  <div class="card">
+    <div class="card-header"><h2>広告主情報</h2></div>
+    <div class="card-body">
+      <textarea class="header-footer-textarea" id="advertisersText" placeholder="広告主のお問合せ先・注意事項など（テキストDL・HTML DLに含まれます）"></textarea>
+    </div>
+  </div>
+
   <!-- 原稿比較 -->
   <div class="diff-container" id="diffContainer">
     <div class="diff-header">
@@ -518,6 +526,7 @@ const el = {
   headerText: $('headerText'),
   bodyText: $('bodyText'),
   footerText: $('footerText'),
+  advertisersText: $('advertisersText'),
   diffContainer: $('diffContainer'),
   diffChangeCount: $('diffChangeCount'),
   diffBeforeText: $('diffBeforeText'),
@@ -676,7 +685,7 @@ function replaceDate() {
 
 // ========== Download / Copy ==========
 function getFullText() {
-  return [el.headerText.value, el.bodyText.value, el.footerText.value]
+  return [el.headerText.value, el.bodyText.value, el.advertisersText.value, el.footerText.value]
     .filter(t => t.trim()).join('\n\n');
 }
 
@@ -691,14 +700,17 @@ function downloadFile(content, filename, type) {
 }
 
 function downloadText() {
-  const date = el.dateInput.value.trim() || 'nodate';
+  const d = el.dateInput.value.trim();
+  const mmdd = d.length === 8 ? d.slice(4) : (d || 'nodate');
   const mediaName = currentMedia ? currentMedia.name : 'mail';
-  const filename = `${date}_${mediaName}.txt`;
-  downloadFile(getFullText(), filename, 'text/plain');
+  downloadFile(getFullText(), `${mmdd}_${mediaName}.txt`, 'text/plain');
 }
 
 function downloadHtml() {
-  downloadFile(buildBmHtmlContent(), 'mail.html', 'text/html');
+  const d = el.dateInput.value.trim();
+  const mmdd = d.length === 8 ? d.slice(4) : (d || 'nodate');
+  const mediaName = currentMedia ? currentMedia.name : 'mail';
+  downloadFile(buildBmHtmlContent(), `${mmdd}_${mediaName}.html`, 'text/html');
 }
 
 async function copyToClipboard() {
@@ -713,7 +725,7 @@ async function copyToClipboard() {
 
 // ========== Character Check ==========
 function checkDepChars() {
-  const allText = el.headerText.value + el.bodyText.value + el.footerText.value;
+  const allText = el.headerText.value + el.bodyText.value + el.advertisersText.value + el.footerText.value;
   const found = DEPENDENT_CHARS.filter(c => allText.includes(c));
   el.charCheckResult.style.display = 'block';
   if (found.length > 0) {
@@ -932,6 +944,7 @@ function renderMediaItem(m) {
         <span class="badge badge-primary" style="margin-left:4px">${m.deliveryTime||''}</span>
       </div>
       <div class="media-item-actions" onclick="event.stopPropagation()">
+        <button class="btn-secondary btn-sm" onclick="copyMediaItem('${m.id}')">複製</button>
         <button class="btn-danger btn-sm" onclick="deleteMediaItem('${m.id}')">削除</button>
       </div>
     </div>
@@ -960,6 +973,10 @@ function renderMediaItem(m) {
             <option value="30" ${(m.deliveryTime||'').endsWith(':30')?'selected':''}>30</option>
           </select>
         </div>
+      </div>
+      <div class="form-row">
+        <label>配信条件ID（配信予約ページ「配信条件選択」のoption value番号）</label>
+        <input type="text" id="edit-segid-${m.id}" value="${escHtml(m.segmentId||'')}" style="max-width:100px" placeholder="例: 171">
       </div>
       <div class="form-row">
         <label>ヘッダー <button type="button" class="btn-outline btn-sm" style="margin-left:8px;font-size:11px;padding:3px 8px" onclick="insertDateTagTo('edit-header-${m.id}')">日付挿入 202x.xx.xx</button></label>
@@ -992,6 +1009,7 @@ function saveMediaItem(oldId) {
   const min = $(`edit-min-${oldId}`).value;
   const header = $(`edit-header-${oldId}`).value;
   const footer = $(`edit-footer-${oldId}`).value;
+  const segmentId = ($(`edit-segid-${oldId}`) ? $(`edit-segid-${oldId}`).value.trim() : '');
 
   if (!newId) { toast('IDを入力してください'); return; }
   if (!name) { toast('媒体名を入力してください'); return; }
@@ -999,7 +1017,7 @@ function saveMediaItem(oldId) {
 
   if (idx === -1) { toast('エラー: 媒体が見つかりません'); return; }
 
-  mediaList[idx] = { id: newId, sortOrder: sort, name, deliverySystem: ds, deliveryTime: `${hour}:${min}`, header, footer };
+  mediaList[idx] = { id: newId, sortOrder: sort, name, deliverySystem: ds, deliveryTime: `${hour}:${min}`, header, footer, segmentId };
   saveMedia(mediaList);
   openEditId = newId !== oldId ? null : newId;
   renderAdminList();
@@ -1023,9 +1041,26 @@ function deleteMediaItem(id) {
   toast('削除しました');
 }
 
+function copyMediaItem(id) {
+  const src = mediaList.find(m => m.id === id);
+  if (!src) return;
+  const newId = getNextId(mediaList);
+  const copy = { ...src, id: newId, name: src.name + '（コピー）', sortOrder: mediaList.length + 1 };
+  mediaList.push(copy);
+  saveMedia(mediaList);
+  openEditId = newId;
+  renderAdminList();
+  renderSelect();
+  toast('複製しました');
+  setTimeout(() => {
+    const el_ = document.getElementById(`media-item-${newId}`);
+    if (el_) el_.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
 function addNewMedia() {
   const id = getNextId(mediaList);
-  const newMedia = { id, sortOrder: mediaList.length + 1, name: '新規媒体', deliverySystem: 'MM', deliveryTime: '10:00', header: '', footer: '' };
+  const newMedia = { id, sortOrder: mediaList.length + 1, name: '新規媒体', deliverySystem: 'MM', deliveryTime: '10:00', header: '', footer: '', segmentId: '' };
   mediaList.push(newMedia);
   saveMedia(mediaList);
   openEditId = id;
@@ -1127,11 +1162,51 @@ function getBmTitle() {
 }
 
 function buildBmHtmlContent() {
-  const h = escHtml(el.headerText.value);
-  const b = escHtml(el.bodyText.value);
-  const f = escHtml(el.footerText.value);
-  const pre = `<pre style="font-family:sans-serif;font-size:14px;line-height:1.8;white-space:pre-wrap">${[h,b,f].filter(x=>x.trim()).join('\n\n')}</pre>`;
-  return `<!DOCTYPE html>\n<html lang="ja">\n<head>\n<meta charset="UTF-8">\n</head>\n<body>\n${pre}\n</body>\n</html>`;
+  const toHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  const content = [el.headerText.value, el.bodyText.value, el.advertisersText.value, el.footerText.value]
+    .filter(x => x.trim()).map(toHtml).join('<br><br>');
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width initial-scale=1">
+    <title></title>
+    <style type="text/css">
+          body{
+            width: 100%;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            font-size: 16px;
+            font-family: Arial,Helvetica,sans-serif;
+            line-height: 2;
+            color: #333;
+            word-break:break-all;
+          }
+    </style>
+</head>
+<body>
+    <table width="100%" border="0" cellpadding="0" cellspacing="0">
+      <tr>
+        <td valign="top">
+          <table class="contents-wrapper" align="center" border="0" cellpadding="0" cellspacing="0">
+            <tr>
+              <td>
+                <table width="100%" border="0" cellpadding="20" cellspacing="0">
+                  <tr>
+                      <td align="left">
+                        ${content}
+                      </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+</body>
+</html>`;
 }
 
 function generateBmText() {
@@ -1185,6 +1260,7 @@ function generateBmHtml() {
 function generateBmReserve() {
   const t = getBmTitle();
   const mName = currentMedia ? (currentMedia.name || '') : '';
+  const segId = currentMedia ? (currentMedia.segmentId || '') : '';
   const d = el.dateInput.value.trim();
   const delivTime = currentMedia ? (currentMedia.deliveryTime || '10:00') : '10:00';
   const [hourStr, minStr] = delivTime.split(':');
@@ -1192,11 +1268,11 @@ function generateBmReserve() {
   const min = parseInt(minStr, 10);
   const dateStr = d.length === 8 ? `${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6,8)}` : '';
   const code = [
-    `var t=${JSON.stringify(t)},n=${JSON.stringify(mName)},ds=${JSON.stringify(dateStr)},h=${hour},m=${min};`,
+    `var t=${JSON.stringify(t)},n=${JSON.stringify(mName)},sid=${JSON.stringify(segId)},ds=${JSON.stringify(dateStr)},h=${hour},m=${min};`,
     `var q=function(sel){return document.querySelector(sel);};`,
     `var tf=q('[name="name"]');if(tf)tf.value=t;`,
     `var seg=q('select[name="segmentid"]');`,
-    `if(seg&&n){Array.from(seg.options).forEach(function(o){if(o.text.indexOf(n)>-1){seg.value=o.value;}});}`,
+    `if(seg){if(sid){seg.value=sid;}else if(n){Array.from(seg.options).forEach(function(o){if(o.text.indexOf(n)>-1){seg.value=o.value;}});}}`,
     `var tmpl=q('select[name="templateid"]');`,
     `var tmplFound=false;`,
     `if(tmpl&&t){Array.from(tmpl.options).forEach(function(o){if(!tmplFound&&o.text.indexOf(t)>-1){tmpl.value=o.value;tmplFound=true;}});}`,
@@ -1296,6 +1372,7 @@ function init() {
 window.toggleEdit = toggleEdit;
 window.saveMediaItem = saveMediaItem;
 window.deleteMediaItem = deleteMediaItem;
+window.copyMediaItem = copyMediaItem;
 window.usePreset = usePreset;
 window.deletePreset = deletePreset;
 window.copyBmLinkHref = copyBmLinkHref;
