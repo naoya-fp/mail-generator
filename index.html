@@ -192,9 +192,11 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
         <label for="advertiserInput" style="white-space:nowrap;font-size:13px;min-width:3.5em">広告主</label>
         <input type="text" id="advertiserInput" placeholder="例: hikidashi（ファイル名: MMDD（広告主）媒体名、未入力時はMMDD_媒体名）" style="flex:1">
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
         <label for="subjectInput" style="white-space:nowrap;font-size:13px;min-width:3.5em">件名</label>
-        <input type="text" id="subjectInput" placeholder="配信メールの件名（MM本文登録ブックマークレットで自動入力されます）" style="flex:1">
+        <input type="text" id="subjectInput" placeholder="件名" style="flex:1;min-width:0">
+        <button class="btn-tag" data-tag="<<:氏名:>>" data-target="subjectInput">フルネーム</button>
+        <button class="btn-tag" data-tag="<<:SETTINGITEM_名字:>>" data-target="subjectInput">名字のみ</button>
       </div>
       <textarea class="header-footer-textarea" id="headerText"></textarea>
     </div>
@@ -772,13 +774,14 @@ function updateDiff() {
 }
 
 // ========== Nametag ==========
-function insertTagAtCursor(tag) {
-  const ta = el.bodyText;
+function insertTagAtCursor(tag, ta) {
+  if (!ta) ta = el.bodyText;
   const start = ta.selectionStart;
   const end = ta.selectionEnd;
   ta.value = ta.value.slice(0, start) + tag + ta.value.slice(end);
   ta.selectionStart = ta.selectionEnd = start + tag.length;
   ta.focus();
+  if (ta === el.subjectInput) updateBmLinks();
 }
 
 function replaceAll() {
@@ -1331,7 +1334,10 @@ function init() {
 
   // Nametag insert buttons
   document.querySelectorAll('.btn-tag').forEach(btn => {
-    btn.addEventListener('click', () => insertTagAtCursor(btn.dataset.tag));
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.target ? $(btn.dataset.target) : null;
+      insertTagAtCursor(btn.dataset.tag, target);
+    });
   });
 
   // Body text diff tracking
