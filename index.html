@@ -780,12 +780,21 @@ function replaceAll() {
   const curr = el.bodyText.value;
   if (!originalBodyText) originalBodyText = curr;
 
-  const count = (curr.match(new RegExp(escRegExp(search), 'g')) || []).length;
-  if (count === 0) { showReplaceResult('一致する文字列が見つかりませんでした', false); return; }
+  const re = new RegExp(escRegExp(search), 'g');
+  const bodyCount = (curr.match(re) || []).length;
+  const subjCount = (el.subjectInput.value.match(re) || []).length;
+  const total = bodyCount + subjCount;
+  if (total === 0) { showReplaceResult('一致する文字列が見つかりませんでした', false); return; }
 
-  el.bodyText.value = curr.split(search).join(tag);
-  updateDiff();
-  showReplaceResult(`${count} 箇所を置換しました`, true);
+  if (bodyCount > 0) {
+    el.bodyText.value = curr.split(search).join(tag);
+    updateDiff();
+  }
+  if (subjCount > 0) {
+    el.subjectInput.value = el.subjectInput.value.split(search).join(tag);
+    updateBmLinks();
+  }
+  showReplaceResult(`${total} 箇所を置換しました`, true);
 }
 
 function showReplaceResult(msg, ok) {
