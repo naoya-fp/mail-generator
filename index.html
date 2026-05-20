@@ -10,9 +10,11 @@ body{font-family:"Hiragino Kaku Gothic ProN","Meiryo",sans-serif;font-size:15px;
 a{color:#4949FF}
 
 /* ===== Layout ===== */
-.app-header{background:#4949FF;color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(73,73,255,.3)}
-.app-header h1{font-size:20px;font-weight:700;letter-spacing:.5px}
-.header-actions{display:flex;gap:8px}
+.app-header{background:#4949FF;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(73,73,255,.35)}
+.app-header h1{font-size:19px;font-weight:700;letter-spacing:.5px}
+.header-actions{display:flex;gap:6px}
+.btn-nav{background:rgba(255,255,255,.13);color:#fff;border:1.5px solid rgba(255,255,255,.28);border-radius:7px;padding:6px 16px;font-size:13px;font-weight:600;letter-spacing:.2px;transition:all .15s}
+.btn-nav:hover{background:rgba(255,255,255,.26);border-color:rgba(255,255,255,.55);color:#fff}
 
 main{max-width:920px;margin:0 auto;padding:24px 16px}
 .view{display:none}
@@ -63,9 +65,15 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .date-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
 .date-row input{width:130px}
 
+/* ===== Body toolbar ===== */
+.body-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding-bottom:12px;margin-bottom:12px;border-bottom:1.5px solid #ebebff}
+.toolbar-group{display:flex;align-items:center;gap:4px}
+.toolbar-label{font-size:10px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:.6px;margin-right:3px;white-space:nowrap}
+.toolbar-sep{width:1px;height:18px;background:#dde;margin:0 6px;flex-shrink:0}
+.btn-tool{background:#f4f4f8;color:#555;border:1.5px solid #e2e2ee;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;transition:all .15s}
+.btn-tool:hover{background:#eaeaff;color:#4949FF;border-color:#c0c0ff}
+
 /* ===== Nametag area ===== */
-.nametag-insert{margin-bottom:10px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.nametag-insert span{font-size:12px;color:#666;margin-right:4px}
 
 .nametag-replace{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
 .nametag-replace .form-item{flex:1;min-width:160px}
@@ -168,8 +176,8 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
 <header class="app-header">
   <h1>Mail Generator</h1>
   <div class="header-actions">
-    <button class="btn-outline btn-sm" id="compareBtn">比較</button>
-    <button class="btn-outline btn-sm" id="adminBtn">管理画面</button>
+    <button class="btn-nav" id="compareBtn">比較</button>
+    <button class="btn-nav" id="adminBtn">管理画面</button>
   </div>
 </header>
 
@@ -246,18 +254,21 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
 
   <!-- 本文 -->
   <div class="card">
-    <div class="card-header">
-      <h2>本文</h2>
-      <div class="nametag-insert">
-        <span>挿入:</span>
-        <button class="btn-tag" data-tag="<<:氏名:>>">フルネーム</button>
-        <button class="btn-tag" data-tag="<<:SETTINGITEM_名字:>>">名字のみ</button>
-        <button class="btn-outline btn-sm" id="checkCharsBtn" style="margin-left:8px">機種依存文字チェック</button>
-        <button class="btn-outline btn-sm" id="urlBulkBtn" style="margin-left:8px">URL一括変換</button>
-        <button class="btn-outline btn-sm" id="urlSelectBtn">URL個別変換</button>
-      </div>
-    </div>
+    <div class="card-header"><h2>本文</h2></div>
     <div class="card-body">
+      <div class="body-toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">挿入</span>
+          <button class="btn-tag" data-tag="<<:氏名:>>">フルネーム</button>
+          <button class="btn-tag" data-tag="<<:SETTINGITEM_名字:>>">名字のみ</button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="toolbar-group">
+          <button class="btn-tool" id="checkCharsBtn">機種依存文字チェック</button>
+          <button class="btn-tool" id="urlBulkBtn">URL一括変換</button>
+          <button class="btn-tool" id="urlSelectBtn">URL個別変換</button>
+        </div>
+      </div>
       <div id="charCheckResult" class="char-check-result" style="margin-bottom:10px"></div>
       <textarea class="body-textarea" id="bodyText" placeholder="本文を入力してください"></textarea>
     </div>
