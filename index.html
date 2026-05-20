@@ -141,6 +141,13 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
 .media-item.dragging{opacity:0.4;border-style:dashed}
 .media-item.drag-over{outline:2px dashed #4949FF;outline-offset:-2px;background:#f5f5ff}
 
+/* ===== URL convert section ===== */
+.url-convert-hint{font-size:12px;color:#666;margin-bottom:8px}
+.url-convert-hint code{background:#f3f4f6;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:11px}
+
+/* ===== Compare view diff override ===== */
+#compareDiffContainer .diff-text{max-height:500px}
+
 /* ===== Bookmarklet Modal ===== */
 /* MM action section */
 .mm-section{display:none;align-items:flex-start;gap:8px;flex-wrap:wrap;width:100%;border-top:1px solid #eee;padding-top:10px;margin-top:6px}
@@ -157,6 +164,7 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
 <header class="app-header">
   <h1>Mail Generator</h1>
   <div class="header-actions">
+    <button class="btn-outline btn-sm" id="compareBtn">比較</button>
     <button class="btn-outline btn-sm" id="adminBtn">管理画面</button>
   </div>
 </header>
@@ -249,6 +257,22 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
     </div>
   </div>
 
+  <!-- URL変換 -->
+  <div class="card">
+    <div class="card-header"><h2>URL変換</h2></div>
+    <div class="card-body">
+      <div class="url-convert-hint">本文内のURLを配信機の計測形式 <code>$:URL_https://...:$</code> に変換します。</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <button class="btn-primary btn-sm" id="convertAllUrlsBtn">一括変換</button>
+        <span class="text-muted">本文内のURLをすべて変換</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="urlConvertInput" placeholder="個別変換するURLを入力" style="flex:1">
+        <button class="btn-outline btn-sm" id="convertSingleUrlBtn" style="white-space:nowrap">個別変換</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 原稿比較 -->
   <div class="diff-container" id="diffContainer">
     <div class="diff-header">
@@ -318,6 +342,46 @@ hr{border:none;border-top:1px solid #eee;margin:16px 0}
   </div>
 </main>
 </div><!-- /adminView -->
+
+<!-- ========== COMPARE VIEW ========== -->
+<div id="compareView" class="view">
+<main>
+  <div class="card">
+    <div class="card-header">
+      <h2>原稿比較</h2>
+      <button class="btn-secondary btn-sm" id="backFromCompareBtn">← メインへ戻る</button>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label for="compareBeforeInput">変更前</label>
+          <textarea id="compareBeforeInput" class="body-textarea" placeholder="変更前の本文を貼り付けてください"></textarea>
+        </div>
+        <div>
+          <label for="compareAfterInput">変更後</label>
+          <textarea id="compareAfterInput" class="body-textarea" placeholder="変更後の本文を貼り付けてください"></textarea>
+        </div>
+      </div>
+      <button class="btn-primary" id="runCompareBtn">比較する</button>
+    </div>
+  </div>
+  <div class="diff-container" id="compareDiffContainer">
+    <div class="diff-header">
+      <span>比較結果 — <strong id="compareDiffCount">0</strong> 行変更</span>
+    </div>
+    <div class="diff-body">
+      <div class="diff-col">
+        <h3>変更前</h3>
+        <div class="diff-text" id="compareDiffBefore"></div>
+      </div>
+      <div class="diff-col">
+        <h3>変更後</h3>
+        <div class="diff-text" id="compareDiffAfter"></div>
+      </div>
+    </div>
+  </div>
+</main>
+</div><!-- /compareView -->
 
 <!-- Toast -->
 <div id="toast"></div>
@@ -548,6 +612,19 @@ const el = {
   importBtn: $('importBtn'),
   importFile: $('importFile'),
   mediaListContainer: $('mediaListContainer'),
+  compareBtn: $('compareBtn'),
+  compareView: $('compareView'),
+  backFromCompareBtn: $('backFromCompareBtn'),
+  compareBeforeInput: $('compareBeforeInput'),
+  compareAfterInput: $('compareAfterInput'),
+  runCompareBtn: $('runCompareBtn'),
+  compareDiffContainer: $('compareDiffContainer'),
+  compareDiffCount: $('compareDiffCount'),
+  compareDiffBefore: $('compareDiffBefore'),
+  compareDiffAfter: $('compareDiffAfter'),
+  convertAllUrlsBtn: $('convertAllUrlsBtn'),
+  urlConvertInput: $('urlConvertInput'),
+  convertSingleUrlBtn: $('convertSingleUrlBtn'),
 };
 
 // ========== Data Management ==========
@@ -585,6 +662,7 @@ function savePresets(list) { localStorage.setItem(PRESET_KEY, JSON.stringify(lis
 function showView(name) {
   el.mainView.classList.toggle('active', name === 'main');
   el.adminView.classList.toggle('active', name === 'admin');
+  el.compareView.classList.toggle('active', name === 'compare');
 }
 
 let toastTimer;
@@ -740,22 +818,11 @@ function checkDepChars() {
 }
 
 // ========== Diff ==========
-function updateDiff() {
-  if (!originalBodyText) return;
-  const curr = el.bodyText.value;
-  const isShown = el.diffContainer.classList.contains('show');
-  if (curr === originalBodyText && !isShown) return;
-
-  const before = originalBodyText;
-  const after = curr;
-  let changes = 0;
-
-  // Simple line-based diff
+function computeDiffHtml(before, after) {
   const beforeLines = before.split('\n');
   const afterLines = after.split('\n');
   const maxLen = Math.max(beforeLines.length, afterLines.length);
-  let bHTML = '', aHTML = '';
-
+  let bHTML = '', aHTML = '', changes = 0;
   for (let i = 0; i < maxLen; i++) {
     const bl = beforeLines[i] !== undefined ? beforeLines[i] : '';
     const al = afterLines[i] !== undefined ? afterLines[i] : '';
@@ -768,11 +835,76 @@ function updateDiff() {
       aHTML += `<span class="diff-added">${escHtml(al)}</span>\n`;
     }
   }
+  return { bHTML, aHTML, changes };
+}
 
+function updateDiff() {
+  if (!originalBodyText) return;
+  const curr = el.bodyText.value;
+  const isShown = el.diffContainer.classList.contains('show');
+  if (curr === originalBodyText && !isShown) return;
+  const { bHTML, aHTML, changes } = computeDiffHtml(originalBodyText, curr);
   el.diffChangeCount.textContent = changes;
   el.diffBeforeText.innerHTML = bHTML;
   el.diffAfterText.innerHTML = aHTML;
   el.diffContainer.classList.add('show');
+}
+
+// ========== URL変換 ==========
+function urlTwoPass(text, converter) {
+  const placeholders = [];
+  const safe = text.replace(/\$:URL_https?:\/\/[^\s$]+:\$/g, m => {
+    const idx = placeholders.length;
+    placeholders.push(m);
+    return `\x00PH${idx}\x00`;
+  });
+  const converted = converter(safe);
+  return converted.replace(/\x00PH(\d+)\x00/g, (_, i) => placeholders[+i]);
+}
+
+function convertAllUrls() {
+  let count = 0;
+  const result = urlTwoPass(el.bodyText.value, text =>
+    text.replace(/https?:\/\/\S+/g, url => {
+      url = url.replace(/[.,;:!?)>]+$/, '');
+      count++;
+      return `$:URL_${url}:$`;
+    })
+  );
+  if (count === 0) { toast('変換対象のURLが見つかりませんでした'); return; }
+  el.bodyText.value = result;
+  toast(`${count} 件のURLを変換しました`);
+  updateBmLinks();
+  if (originalBodyText) updateDiff();
+}
+
+function convertSingleUrl() {
+  const rawUrl = el.urlConvertInput.value.trim();
+  if (!rawUrl) { toast('URLを入力してください'); return; }
+  if (!/^https?:\/\//.test(rawUrl)) { toast('URLはhttp://またはhttps://で始まる必要があります'); return; }
+  const wrapped = `$:URL_${rawUrl}:$`;
+  const escaped = rawUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let count = 0;
+  const result = urlTwoPass(el.bodyText.value, text =>
+    text.replace(new RegExp(escaped, 'g'), () => { count++; return wrapped; })
+  );
+  if (count === 0) { toast('本文にそのURLが見つかりませんでした（既に変換済みの可能性があります）'); return; }
+  el.bodyText.value = result;
+  toast(`${count} 件のURLを変換しました`);
+  updateBmLinks();
+  if (originalBodyText) updateDiff();
+}
+
+// ========== 原稿比較ビュー ==========
+function runCompare() {
+  const before = el.compareBeforeInput.value;
+  const after = el.compareAfterInput.value;
+  if (!before && !after) { toast('変更前・変更後のテキストを入力してください'); return; }
+  const { bHTML, aHTML, changes } = computeDiffHtml(before, after);
+  el.compareDiffCount.textContent = changes;
+  el.compareDiffBefore.innerHTML = bHTML;
+  el.compareDiffAfter.innerHTML = aHTML;
+  el.compareDiffContainer.classList.add('show');
 }
 
 // ========== Nametag ==========
@@ -1321,6 +1453,9 @@ function init() {
     renderAdminList();
   });
   el.backToMainBtn.addEventListener('click', () => showView('main'));
+  el.compareBtn.addEventListener('click', () => showView('compare'));
+  el.backFromCompareBtn.addEventListener('click', () => showView('main'));
+  el.runCompareBtn.addEventListener('click', runCompare);
 
   // Media select
   el.mediaSelect.addEventListener('change', handleMediaChange);
@@ -1362,6 +1497,10 @@ function init() {
   el.downloadHtmlBtn.addEventListener('click', downloadHtml);
   el.copyBtn.addEventListener('click', copyToClipboard);
   el.checkCharsBtn.addEventListener('click', checkDepChars);
+
+  // URL変換
+  el.convertAllUrlsBtn.addEventListener('click', convertAllUrls);
+  el.convertSingleUrlBtn.addEventListener('click', convertSingleUrl);
 
   // Admin
   attachDragHandlers();
