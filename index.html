@@ -704,17 +704,20 @@ async function copyToClipboard() {
 function checkDepChars() {
   const allText = [el.headerText.value, el.bodyText.value, el.footerText.value]
     .filter(t => t.trim()).join('\n\n');
-  const found = DEPENDENT_CHARS.filter(c => allText.includes(c));
+  const foundChars = DEPENDENT_CHARS.filter(c => allText.includes(c));
+  const hasEmoji = /\p{Extended_Pictographic}/u.test(allText);
+  const hasIssues = foundChars.length > 0 || hasEmoji;
   const preview = $('depCharPreview');
   el.charCheckResult.style.display = 'block';
-  if (found.length > 0) {
+  if (hasIssues) {
+    const msgParts = [...foundChars];
+    if (hasEmoji) msgParts.push('絵文字');
     el.charCheckResult.className = 'char-check-result error';
-    el.charCheckResult.textContent = '機種依存文字が見つかりました: ' + found.join(' ');
-    let html = escHtml(allText);
-    found.forEach(c => {
-      html = html.split(c).join(`<mark class="dep-char">${c}</mark>`);
-    });
-    preview.innerHTML = html;
+    el.charCheckResult.textContent = '機種依存文字が見つかりました: ' + msgParts.join(' ');
+    const rePatterns = foundChars.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    rePatterns.push('\\p{Extended_Pictographic}');
+    const highlightRe = new RegExp(rePatterns.join('|'), 'gu');
+    preview.innerHTML = escHtml(allText).replace(highlightRe, m => `<mark class="dep-char">${m}</mark>`);
     preview.classList.add('show');
   } else {
     el.charCheckResult.className = 'char-check-result ok';
