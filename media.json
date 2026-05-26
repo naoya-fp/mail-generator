@@ -1,5 +1,5 @@
 {
-  "_version": 1779778025852,
+  "_version": 1779778042585,
   "items": [
     {
       "id": "01",
@@ -245,8 +245,8 @@
       "deliveryTime": "10:00",
       "header": "りんご",
       "footer": "りんご",
-      "segmentId": "りんご",
-      "fromName": "りんご"
+      "segmentId": "りんご　ごりら",
+      "fromName": "りんご　ごりら"
     },
     {
       "id": "26",
