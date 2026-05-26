@@ -1229,6 +1229,7 @@ function importData(file) {
       renderAdminList();
       renderSelect();
       toast(`${data.length} 件をインポートしました`);
+      autoSync();
     } catch(err) {
       toast('インポートエラー: ' + err.message);
     }
