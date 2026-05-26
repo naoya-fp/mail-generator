@@ -538,7 +538,7 @@ function csvToMedia(text) {
 
 async function loadMedia() {
   try {
-    const res = await fetch('./media.json', { cache: 'no-cache' });
+    const res = await fetch('./media.json?t=' + Date.now(), { cache: 'no-store' });
     if (res.ok) {
       const payload = await res.json();
       const remoteVersion = payload._version || 0;
