@@ -507,16 +507,38 @@ const el = {
 
 // ========== Data Management ==========
 function csvToMedia(text) {
-  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM
-  const lines = text.trim().split('\n').map(l => l.replace(/\r$/, '')).filter(l => l);
-  if (lines.length < 2) return [];
-  const NUM_COLS = 10; // positional: id,sortOrder,columnName,name,deliveryTime,deliverySystem,segmentId,fromName,header,footer
-  return lines.slice(1).map(line => {
-    const parts = line.split(',');
-    while (parts.length > NUM_COLS) {
-      parts[NUM_COLS - 1] += ',' + parts.splice(NUM_COLS, 1)[0];
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  // RFC 4180 parser — handles quoted fields with embedded commas/newlines
+  const rows = [];
+  let i = 0;
+  const len = text.length;
+  while (i < len) {
+    const row = [];
+    while (i < len) {
+      let field = '';
+      if (text[i] === '"') {
+        i++;
+        while (i < len) {
+          if (text[i] === '"' && text[i + 1] === '"') { field += '"'; i += 2; }
+          else if (text[i] === '"') { i++; break; }
+          else { field += text[i++]; }
+        }
+      } else {
+        while (i < len && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') {
+          field += text[i++];
+        }
+        field = field.replace(/\\n/g, '\n'); // 旧形式 \n エスケープとの後方互換
+      }
+      row.push(field);
+      if (i < len && text[i] === ',') { i++; } else { break; }
     }
-    const v = i => (parts[i] || '').replace(/\\n/g, '\n');
+    if (i < len && text[i] === '\r') i++;
+    if (i < len && text[i] === '\n') i++;
+    if (row.length > 1 || (row.length === 1 && row[0])) rows.push(row);
+  }
+  if (rows.length < 2) return [];
+  return rows.slice(1).map(parts => {
+    const v = i => parts[i] || '';
     return {
       id: v(0),
       sortOrder: parseInt(v(1), 10) || 0,
@@ -1136,13 +1158,22 @@ function addNewMedia() {
 // ========== Import / Export ==========
 function mediaToCSV(list) {
   const cols = ['媒体ID','表示順','カラム名','媒体名','配信時刻','配信システム','セグメントID','差出人名','ヘッダー','フッター'];
-  const rows = [cols.join(',')];
+  const q = v => {
+    const s = String(v == null ? '' : v);
+    return (s.includes(',') || s.includes('\n') || s.includes('"'))
+      ? '"' + s.replace(/"/g, '""') + '"'
+      : s;
+  };
+  const rows = [cols.map(q).join(',')];
   for (const m of list) {
-    const h = (m.header || '').replace(/\n/g, '\\n');
-    const f = (m.footer || '').replace(/\n/g, '\\n');
-    rows.push([m.id, m.sortOrder, m.columnName, m.name, m.deliveryTime||'10:00', m.deliverySystem||'MM', m.segmentId||'', m.fromName||'', h, f].join(','));
+    rows.push([
+      m.id, m.sortOrder, m.columnName || '', m.name || '',
+      m.deliveryTime || '10:00', m.deliverySystem || 'MM',
+      m.segmentId || '', m.fromName || '',
+      m.header || '', m.footer || ''
+    ].map(q).join(','));
   }
-  return rows.join('\n');
+  return rows.join('\r\n');
 }
 
 function exportData() {
